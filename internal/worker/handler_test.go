@@ -11,6 +11,7 @@ import (
 	"github.com/HARA-DID/did-queueing-engine/internal/service"
 	"github.com/HARA-DID/did-queueing-engine/internal/worker"
 	"github.com/HARA-DID/did-queueing-engine/pkg"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
 )
 
@@ -26,7 +27,8 @@ func buildHandler(t *testing.T, bc *mocks.MockBlockchainService) (*worker.Handle
 	log := newTestLogger()
 	svc := service.NewEventService(repo, bc, log)
 	retryCfg := pkg.RetryConfig{MaxAttempts: 2, BaseDelay: time.Millisecond, MaxDelay: 10 * time.Millisecond}
-	metrics := pkg.NewMetrics()
+	reg := prometheus.NewRegistry()
+	metrics := pkg.NewMetrics(reg)
 	return worker.NewHandler(svc, retryCfg, metrics, log), repo
 }
 

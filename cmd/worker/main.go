@@ -7,6 +7,7 @@ import (
 	"syscall"
 
 	"github.com/joho/godotenv"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
 
 	"github.com/HARA-DID/did-queueing-engine/internal/config"
@@ -93,7 +94,7 @@ func main() {
 	eventSvc := service.NewEventService(jobRepo, blockchainSvc, log)
 
 	// ── Metrics ────────────────────────────────────────────────────────────
-	metrics := pkg.NewMetrics()
+	metrics := pkg.NewMetrics(prometheus.DefaultRegisterer)
 
 	// ── Handler ────────────────────────────────────────────────────────────
 	retryCfg := pkg.DefaultRetryConfig(cfg.Worker.MaxRetry, cfg.Worker.RetryBaseDelay)

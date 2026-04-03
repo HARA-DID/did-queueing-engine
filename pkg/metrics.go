@@ -14,25 +14,30 @@ type Metrics struct {
 	ProcessDuration prometheus.Histogram
 }
 
-func NewMetrics() *Metrics {
+func NewMetrics(reg prometheus.Registerer) *Metrics {
+	if reg == nil {
+		reg = prometheus.DefaultRegisterer
+	}
+	factory := promauto.With(reg)
+
 	return &Metrics{
-		EventsReceived: promauto.NewCounter(prometheus.CounterOpts{
+		EventsReceived: factory.NewCounter(prometheus.CounterOpts{
 			Name: "worker_events_received_total",
 			Help: "Total number of events received from Redis stream.",
 		}),
-		EventsProcessed: promauto.NewCounterVec(prometheus.CounterOpts{
+		EventsProcessed: factory.NewCounterVec(prometheus.CounterOpts{
 			Name: "worker_events_processed_total",
 			Help: "Total number of events processed, partitioned by status.",
 		}, []string{"status"}),
-		EventsRetried: promauto.NewCounter(prometheus.CounterOpts{
+		EventsRetried: factory.NewCounter(prometheus.CounterOpts{
 			Name: "worker_events_retried_total",
 			Help: "Total number of event retry attempts.",
 		}),
-		EventsDLQ: promauto.NewCounter(prometheus.CounterOpts{
+		EventsDLQ: factory.NewCounter(prometheus.CounterOpts{
 			Name: "worker_events_dlq_total",
 			Help: "Total number of events pushed to the dead-letter queue.",
 		}),
-		ProcessDuration: promauto.NewHistogram(prometheus.HistogramOpts{
+		ProcessDuration: factory.NewHistogram(prometheus.HistogramOpts{
 			Name:    "worker_event_process_duration_seconds",
 			Help:    "Histogram of event processing durations.",
 			Buckets: prometheus.DefBuckets,
