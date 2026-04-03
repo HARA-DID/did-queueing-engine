@@ -3,14 +3,14 @@ module github.com/HARA-DID/did_queueing_engine
 go 1.25.5
 
 require (
-	github.com/HARA-DID/account-abstraction-sdk v1.0.1
-	github.com/HARA-DID/alias-root-sdk v1.0.1
-	github.com/HARA-DID/did-root-sdk v1.0.1
-	github.com/HARA-DID/did-verifiable-credentials-sdk v1.0.1
+	github.com/HARA-DID/account-abstraction-sdk v1.0.2
+	github.com/HARA-DID/alias-root-sdk v1.0.2
+	github.com/HARA-DID/did-root-sdk v1.0.2
+	github.com/HARA-DID/did-verifiable-credentials-sdk v1.0.2
+	github.com/HARA-DID/hara-core-blockchain-lib v1.9.62
 	github.com/google/uuid v1.6.0
 	github.com/joho/godotenv v1.5.1
 	github.com/lib/pq v1.10.9
-	github.com/meQlause/hara-core-blockchain-lib v1.9.61
 	github.com/prometheus/client_golang v1.19.0
 	github.com/redis/go-redis/v9 v9.5.1
 	github.com/sirupsen/logrus v1.9.3

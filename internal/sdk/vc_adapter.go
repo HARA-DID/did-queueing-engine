@@ -7,7 +7,7 @@ import (
 	"github.com/HARA-DID/did-verifiable-credentials-sdk/pkg/nftbase"
 	vcfact "github.com/HARA-DID/did-verifiable-credentials-sdk/pkg/vcfactory"
 	vcstor "github.com/HARA-DID/did-verifiable-credentials-sdk/pkg/vcstorage"
-	harautils "github.com/meQlause/hara-core-blockchain-lib/utils"
+	harautils "github.com/HARA-DID/hara-core-blockchain-lib/utils"
 
 	"github.com/HARA-DID/did_queueing_engine/internal/config"
 	"github.com/HARA-DID/did_queueing_engine/internal/domain"

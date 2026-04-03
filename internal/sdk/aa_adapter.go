@@ -8,7 +8,7 @@ import (
 	aapkg "github.com/HARA-DID/account-abstraction-sdk/pkg/entrypoint"
 	"github.com/HARA-DID/account-abstraction-sdk/pkg/gasmanager"
 	"github.com/HARA-DID/account-abstraction-sdk/pkg/walletfactory"
-	harautils "github.com/meQlause/hara-core-blockchain-lib/utils"
+	harautils "github.com/HARA-DID/hara-core-blockchain-lib/utils"
 
 	"github.com/HARA-DID/did_queueing_engine/internal/config"
 	"github.com/HARA-DID/did_queueing_engine/internal/domain"

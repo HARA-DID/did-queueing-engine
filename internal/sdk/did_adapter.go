@@ -6,7 +6,7 @@ import (
 	"math/big"
 
 	didfactory "github.com/HARA-DID/did-root-sdk/pkg/factory"
-	harautils "github.com/meQlause/hara-core-blockchain-lib/utils"
+	harautils "github.com/HARA-DID/hara-core-blockchain-lib/utils"
 
 	"github.com/HARA-DID/did_queueing_engine/internal/config"
 	"github.com/HARA-DID/did_queueing_engine/internal/domain"

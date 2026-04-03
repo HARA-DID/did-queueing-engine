@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"math/big"
 
-	harachain "github.com/meQlause/hara-core-blockchain-lib/pkg/blockchain"
-	haranetwork "github.com/meQlause/hara-core-blockchain-lib/pkg/network"
-	harawallet "github.com/meQlause/hara-core-blockchain-lib/pkg/wallet"
-	harautils "github.com/meQlause/hara-core-blockchain-lib/utils"
+	harachain "github.com/HARA-DID/hara-core-blockchain-lib/pkg/blockchain"
+	haranetwork "github.com/HARA-DID/hara-core-blockchain-lib/pkg/network"
+	harawallet "github.com/HARA-DID/hara-core-blockchain-lib/pkg/wallet"
+	harautils "github.com/HARA-DID/hara-core-blockchain-lib/utils"
 
 	"github.com/HARA-DID/did_queueing_engine/internal/config"
 )
