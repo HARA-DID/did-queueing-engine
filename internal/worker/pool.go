@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/HARA-DID/did-queueing-engine/internal/config"
@@ -14,6 +13,7 @@ import (
 	"github.com/HARA-DID/did-queueing-engine/pkg"
 	"github.com/redis/go-redis/v9"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/sync/errgroup"
 )
 
 // Pool is the Redis Streams consumer group worker.
@@ -55,51 +55,41 @@ func (p *Pool) Run(ctx context.Context) {
 		"concurrency": p.cfg.Concurrency,
 	}).Info("starting worker pool")
 
-	sem := make(chan struct{}, p.cfg.Concurrency)
-	var wg sync.WaitGroup
+	g, groupCtx := errgroup.WithContext(ctx)
+	g.SetLimit(p.cfg.Concurrency)
 
 	for {
 		select {
-		case <-ctx.Done():
+		case <-groupCtx.Done():
 			p.log.Info("context cancelled; waiting for in-flight jobs")
-			wg.Wait()
+			_ = g.Wait()
 			p.log.Info("all in-flight jobs finished; worker pool stopped")
 			return
 		default:
 		}
 
-		messages, err := p.readMessages(ctx)
+		messages, err := p.readMessages(groupCtx)
 		if err != nil {
-			if ctx.Err() != nil {
-				// Context cancelled during read — clean shutdown.
-				wg.Wait()
+			if groupCtx.Err() != nil {
+				_ = g.Wait()
 				return
 			}
 			p.log.WithError(err).Error("XREADGROUP error; backing off")
-			sleep(ctx, p.cfg.PollInterval*5)
+			sleep(groupCtx, p.cfg.PollInterval*5)
 			continue
 		}
 
 		if len(messages) == 0 {
-			sleep(ctx, p.cfg.PollInterval)
+			sleep(groupCtx, p.cfg.PollInterval)
 			continue
 		}
 
 		for _, msg := range messages {
-			// Acquire semaphore slot.
-			select {
-			case sem <- struct{}{}:
-			case <-ctx.Done():
-				wg.Wait()
-				return
-			}
-
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				defer func() { <-sem }()
-				p.processMessage(ctx, msg)
-			}()
+			m := msg // capture for closure
+			g.Go(func() error {
+				p.processMessage(groupCtx, m)
+				return nil
+			})
 		}
 	}
 }
