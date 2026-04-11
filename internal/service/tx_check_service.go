@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/HARA-DID/did-queueing-engine/internal/callback"
@@ -24,6 +25,7 @@ type TxCheckService struct {
 	eventCallbacks map[domain.EventType]callback.Func
 	log            *logrus.Logger
 	tasks          chan TxCheckTask
+	wg             sync.WaitGroup
 }
 
 func NewTxCheckService(
@@ -50,33 +52,62 @@ func (s *TxCheckService) Enqueue(task TxCheckTask) {
 
 func (s *TxCheckService) Start(ctx context.Context) {
 	s.log.Info("TxCheckService started")
+
+	// Main loop
+loop:
 	for {
 		select {
 		case <-ctx.Done():
-			s.log.Info("TxCheckService stopping")
-			return
+			s.log.Info("TxCheckService stopping (context cancelled)")
+			break loop
 		case task := <-s.tasks:
-			batch := []TxCheckTask{task}
-
-			drainLoop := true
-			for drainLoop {
-				select {
-				case next := <-s.tasks:
-					batch = append(batch, next)
-				default:
-					drainLoop = false
-				}
-			}
-
-			s.processBatch(ctx, batch)
+			batch := s.collectBatch(task)
+			s.wg.Add(1)
+			go s.processBatch(batch)
 		}
 	}
+
+	// Drain remaining tasks
+drainLoop:
+	for {
+		select {
+		case task := <-s.tasks:
+			batch := s.collectBatch(task)
+			s.wg.Add(1)
+			go s.processBatch(batch)
+		default:
+			break drainLoop
+		}
+	}
+
+	s.log.Info("Waiting for pending confirmations to complete...")
+	s.wg.Wait()
+	s.log.Info("TxCheckService stopped")
 }
 
-func (s *TxCheckService) processBatch(ctx context.Context, batch []TxCheckTask) {
+func (s *TxCheckService) collectBatch(firstTask TxCheckTask) []TxCheckTask {
+	batch := []TxCheckTask{firstTask}
+	drainLoop := true
+	for drainLoop {
+		select {
+		case next := <-s.tasks:
+			batch = append(batch, next)
+		default:
+			drainLoop = false
+		}
+	}
+	return batch
+}
+
+func (s *TxCheckService) processBatch(batch []TxCheckTask) {
+	defer s.wg.Done()
+
 	if len(batch) == 0 {
 		return
 	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
 
 	hashes := make([]string, 0, len(batch))
 	for _, t := range batch {
@@ -113,7 +144,7 @@ func (s *TxCheckService) processBatch(ctx context.Context, batch []TxCheckTask) 
 	}
 }
 
-func (s *TxCheckService) triggerCallback(ctx context.Context, event *domain.Event, result callback.Result) {
+func (s *TxCheckService) triggerCallback(_ context.Context, event *domain.Event, result callback.Result) {
 	cb, ok := s.eventCallbacks[event.Type]
 	if !ok {
 		return

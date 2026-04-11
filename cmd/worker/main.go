@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
@@ -13,12 +12,11 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
 
-	"github.com/HARA-DID/did-queueing-engine/internal/callback"
-	"github.com/HARA-DID/did-queueing-engine/internal/config"
 	infradb "github.com/HARA-DID/did-queueing-engine/internal/infra/db"
 	redisinfra "github.com/HARA-DID/did-queueing-engine/internal/infra/redis"
-	"github.com/HARA-DID/did-queueing-engine/internal/sdk"
-	"github.com/HARA-DID/did-queueing-engine/internal/service"
+
+	"github.com/HARA-DID/did-queueing-engine/internal/callback"
+	"github.com/HARA-DID/did-queueing-engine/internal/config"
 	"github.com/HARA-DID/did-queueing-engine/internal/worker"
 	"github.com/HARA-DID/did-queueing-engine/pkg"
 )
@@ -62,79 +60,42 @@ func main() {
 		"group":  cfg.Redis.GroupName,
 	}).Info("consumer group ready")
 
+	// ── HTTP server (health + metrics) ─────────────────────────────────────
+	httpSrv := worker.NewHTTPServer(cfg.Server.Port, log)
+	httpSrv.Start()
+
 	// ── Metrics, Repositories, Callbacks ───────────────────────────────────
 	jobRepo := infradb.NewPostgresJobRepository(db)
 	callbackRegistry := callback.NewDefaultRegistry()
 	metrics := pkg.NewMetrics(prometheus.DefaultRegisterer)
 	retryCfg := pkg.DefaultRetryConfig(cfg.Worker.MaxRetry, cfg.Worker.RetryBaseDelay)
 
-	// ── HTTP server (health + metrics) ─────────────────────────────────────
-	httpSrv := worker.NewHTTPServer(cfg.Server.Port, log)
-	httpSrv.Start()
-
-	log.WithField("worker_count", len(cfg.Blockchain.PrivateKeys)).Info("starting worker pools per identity")
+	// ── Global Transaction Check Service ──────────────────────────────────
+	txCheckSvc, _ := initTxCheckService(cfg.Blockchain, jobRepo, callbackRegistry, log)
 
 	// ── Worker pool per private key ────────────────────────────────────────
+	log.WithField("worker_count", len(cfg.Blockchain.PrivateKeys)).Info("starting worker pools per identity")
 	g, gCtx := errgroup.WithContext(ctx)
+
+	g.Go(func() error {
+		txCheckSvc.Start(gCtx)
+		return nil
+	})
+	deps := &WorkerDependencies{
+		Config:           cfg,
+		JobRepo:          jobRepo,
+		RedisClient:      redisClient,
+		CallbackRegistry: callbackRegistry,
+		TxCheckSvc:       txCheckSvc,
+		Metrics:          metrics,
+		RetryCfg:         retryCfg,
+	}
+
 	for i, pk := range cfg.Blockchain.PrivateKeys {
+		pkCaptured := pk
 		workerIndex := i + 1
-		workerConsumerName := fmt.Sprintf("%s-%d", cfg.Worker.ConsumerName, workerIndex)
-
-		workerConsumerNameCaptured := workerConsumerName
-
 		g.Go(func() error {
-			workerLog := log.WithField("consumer", workerConsumerNameCaptured)
-
-			provider, err := sdk.NewProvider(cfg.Blockchain, pk)
-			if err != nil {
-				workerLog.WithError(err).Fatal("failed to initialise blockchain provider")
-			}
-
-			didAdapter, err := sdk.NewDIDAdapter(provider, cfg.Blockchain)
-			if err != nil {
-				workerLog.WithError(err).Fatal("failed to initialise DID adapter")
-			}
-
-			aaAdapter, err := sdk.NewAAAdapter(provider, cfg.Blockchain)
-			if err != nil {
-				workerLog.WithError(err).Fatal("failed to initialise AA adapter")
-			}
-
-			vcAdapter, err := sdk.NewVCAdapter(provider, cfg.Blockchain)
-			if err != nil {
-				workerLog.WithError(err).Fatal("failed to initialise VC adapter")
-			}
-
-			aliasAdapter, err := sdk.NewAliasAdapter(provider, cfg.Blockchain)
-			if err != nil {
-				workerLog.WithError(err).Fatal("failed to initialise Alias adapter")
-			}
-
-			blockchainSvc := sdk.NewCompositeAdapter(didAdapter, aaAdapter, vcAdapter, aliasAdapter)
-
-			// Initialize EventService first to populate its callback map
-			eventSvc := service.NewEventService(jobRepo, blockchainSvc, log)
-
-			// Initialize and start background transaction confirmation service
-			txCheckSvc := service.NewTxCheckService(jobRepo, provider.Chain, callbackRegistry, eventSvc.EventCallbacks, log, cfg.Blockchain.TxCheckChannelBuffer)
-			g.Go(func() error {
-				txCheckSvc.Start(gCtx)
-				return nil
-			})
-
-			// Link them
-			eventSvc.SetTxCheckService(txCheckSvc)
-
-			handler := worker.NewHandler(eventSvc, retryCfg, metrics, log)
-
-			workerCfg := cfg.Worker
-			workerCfg.ConsumerName = workerConsumerNameCaptured
-
-			pool := worker.NewPool(redisClient, handler, jobRepo, workerCfg, cfg.Redis, metrics, log)
-
-			workerLog.Info("worker pool starting")
-			pool.Run(gCtx)
-			return nil
+			return startWorker(gCtx, pkCaptured, workerIndex, deps, log)
 		})
 	}
 
